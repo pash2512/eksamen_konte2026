@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar-bg);
+  --color-card-hover: var(--card-hover);
+  --color-brand: #000000; /* Classy black instead of green */
+  --color-brand-foreground: #ffffff;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+  --sidebar-bg: #f9f9f9;
+  --card-hover: #f4f4f4;
+  --border-subtle: #e5e5e5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #212121;
+    --foreground: #ececf1;
+    --sidebar-bg: #171717;
+    --card-hover: #2f2f2f;
+    --border-subtle: #303030;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-input-shadow {
+  box-shadow: 0 0 15px rgba(0,0,0,0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  .chat-input-shadow {
+    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  }
+}
