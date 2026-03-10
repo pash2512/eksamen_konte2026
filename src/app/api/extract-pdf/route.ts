@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     
     // Polyfill for pdf.js internals
-    if (typeof (global as any).DOMMatrix === 'undefined') {
-        (global as any).DOMMatrix = class DOMMatrix {
+    if (typeof (global as unknown as Record<string, unknown>).DOMMatrix === 'undefined') {
+        (global as unknown as Record<string, unknown>).DOMMatrix = class DOMMatrix {
             constructor() {}
             static fromFloat64Array() { return new DOMMatrix(); }
             static fromFloat32Array() { return new DOMMatrix(); }
@@ -43,14 +43,14 @@ export async function POST(request: Request) {
 
         // Final safety check: if text is still empty, let's try to see if result.pages has anything
         if (!text.trim() && result.pages) {
-            text = result.pages.map((p: any) => p.text || "").join("\n");
+            text = (result.pages as Array<{ text?: string }>).map((p) => p.text || "").join("\n");
         }
 
         console.log(`Extracted ${text.length} characters from ${numPages} pages.`);
 
         // Clean up the parser
-        if (typeof parser.destroy === 'function') {
-            await parser.destroy();
+        if (typeof (parser as { destroy?: () => Promise<void> }).destroy === 'function') {
+            await (parser as { destroy: () => Promise<void> }).destroy();
         }
 
         return NextResponse.json({ 
@@ -58,21 +58,23 @@ export async function POST(request: Request) {
             pageCount: numPages
         });
 
-    } catch (parseError: any) {
+    } catch (parseError: unknown) {
         console.error('Extraction failed:', parseError);
+        const err = parseError as Error;
         // If it fails due to worker path, try a CDN or a simpler require fallback
         return NextResponse.json({ 
             error: 'Parsing Error', 
-            details: parseError.message,
-            stack: parseError.stack
+            details: err.message,
+            stack: err.stack
         }, { status: 500 });
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Global Error:', error);
+    const err = error as Error;
     return NextResponse.json({ 
         error: 'Global Error', 
-        details: error.message 
+        details: err.message 
     }, { status: 500 });
   }
 }

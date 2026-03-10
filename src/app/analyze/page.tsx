@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import FileUpload from '@/components/FileUpload';
-import UrlInput from '@/components/UrlInput';
 import ToneSelector from '@/components/ToneSelector';
 import SenioritySelector from '@/components/SenioritySelector';
 import LanguageSelector from '@/components/LanguageSelector';
@@ -15,7 +14,7 @@ export default function AnalyzePage() {
   const [cvFileName, setCvFileName] = useState('');
   const [coverLetterText, setCoverLetterText] = useState('');
   const [clFileName, setClFileName] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
+  const [jobDescription] = useState('');
   const [jobUrl, setJobUrl] = useState('');
   const [tone, setTone] = useState('Professional');
   const [seniority, setSeniority] = useState('Junior');

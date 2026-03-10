@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         try {
             const errorData = JSON.parse(responseText);
             errorMsg = errorData.error || errorMsg;
-        } catch (e) {
+        } catch {
             errorMsg = responseText || errorMsg;
         }
         throw new Error(errorMsg);
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     try {
         return NextResponse.json(JSON.parse(responseText));
-    } catch (e) {
+    } catch {
         console.error('Failed to parse worker JSON:', responseText);
         throw new Error("Invalid JSON response from backend");
     }

@@ -20,13 +20,14 @@ function ResultsDisplay() {
     const data = sessionStorage.getItem('jobfit_analysis_result');
     if (data) {
       try {
-        setResult(JSON.parse(data));
+        const parsed = JSON.parse(data);
+        setTimeout(() => setResult(parsed), 0);
       } catch (err) {
         console.error("Failed to parse results data:", err);
-        setError(true);
+        setTimeout(() => setError(true), 0);
       }
     } else {
-      setError(true);
+      setTimeout(() => setError(true), 0);
     }
 
     // Optional: Clear data from sessionStorage immediately after loading into state?
