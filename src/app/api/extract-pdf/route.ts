@@ -25,7 +25,14 @@ export async function POST(request: Request) {
 
     // Set worker source to legacy build for compatibility in Node.js
     const workerPath = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
-    pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
+    
+    // Check if we are in production (Vercel) or development
+    if (process.env.NODE_ENV === 'production') {
+        // Use a simpler approach for Vercel where node_modules might not be in the same place
+        pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+    } else {
+        pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
+    }
 
     try {
         console.log(`Starting extraction for ${file.name} using v2.4.5 with manual worker...`);
