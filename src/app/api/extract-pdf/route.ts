@@ -13,6 +13,11 @@ export async function POST(request: Request) {
     }
 
     const bytes = await file.arrayBuffer();
+    console.log(`Received file ${file.name}, size: ${bytes.byteLength} bytes.`);
+
+    if (bytes.byteLength === 0) {
+      return NextResponse.json({ error: 'File is empty' }, { status: 400 });
+    }
     
     // Polyfill for pdf.js internals
     if (typeof (global as unknown as Record<string, unknown>).DOMMatrix === 'undefined') {
@@ -24,18 +29,11 @@ export async function POST(request: Request) {
     }
 
     // Set worker source to legacy build for compatibility in Node.js
-    const workerPath = path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.mjs');
-    
-    // Check if we are in production (Vercel) or development
-    if (process.env.NODE_ENV === 'production') {
-        // Use a simpler approach for Vercel where node_modules might not be in the same place
-        pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
-    } else {
-        pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
-    }
+    const pdfjsVersion = "5.4.296"; // Hardcoded from npm list
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/legacy/build/pdf.worker.min.mjs`;
 
     try {
-        console.log(`Starting extraction for ${file.name} using v2.4.5 with manual worker...`);
+        console.log(`Starting extraction using pdf-parse 2.4.5 with CDN worker version ${pdfjsVersion}...`);
         
         const parser = new PDFParse({
             data: Buffer.from(bytes),
@@ -43,13 +41,16 @@ export async function POST(request: Request) {
         });
 
         // Use the getText() method
+        console.log('Requesting text extraction...');
         const result = await parser.getText();
+        console.log('Text extraction complete.');
         
         let text = result.text || "";
         const numPages = result.total || 0;
 
         // Final safety check: if text is still empty, let's try to see if result.pages has anything
         if (!text.trim() && result.pages) {
+            console.log('Main text field empty, checking individual pages...');
             text = (result.pages as Array<{ text?: string }>).map((p) => p.text || "").join("\n");
         }
 
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
 
         // Clean up the parser
         if (typeof (parser as { destroy?: () => Promise<void> }).destroy === 'function') {
+            console.log('Cleaning up parser...');
             await (parser as { destroy: () => Promise<void> }).destroy();
         }
 
@@ -66,9 +68,8 @@ export async function POST(request: Request) {
         });
 
     } catch (parseError: unknown) {
-        console.error('Extraction failed:', parseError);
+        console.error('Extraction failed inside try/catch:', parseError);
         const err = parseError as Error;
-        // If it fails due to worker path, try a CDN or a simpler require fallback
         return NextResponse.json({ 
             error: 'Parsing Error', 
             details: err.message,
@@ -77,11 +78,12 @@ export async function POST(request: Request) {
     }
 
   } catch (error: unknown) {
-    console.error('Global Error:', error);
+    console.error('Global Route Error:', error);
     const err = error as Error;
     return NextResponse.json({ 
         error: 'Global Error', 
-        details: err.message 
+        details: err.message,
+        stack: err.stack
     }, { status: 500 });
   }
 }

@@ -45,8 +45,9 @@ export default function AnalyzePage() {
         body: formData,
       });
       
+      const data = await response.json();
+
       if (response.ok) {
-        const data = await response.json();
         if (type === 'cv') {
           setCvText(data.text);
           setCvFileName(file.name);
@@ -55,12 +56,11 @@ export default function AnalyzePage() {
           setClFileName(file.name);
         }
       } else {
-        const errorData = await response.json();
-        alert(`Failed to extract text: ${errorData.details || errorData.error || 'Unknown error'}`);
+        alert(`Extraction Error: ${data.details || data.error || 'Unknown server error'}`);
       }
     } catch (err) {
       console.error('PDF upload error:', err);
-      alert('Error uploading PDF.');
+      alert(`Network Error: ${err instanceof Error ? err.message : 'Failed to connect to server'}`);
     } finally {
       setIsExtracting(false);
     }
