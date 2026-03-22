@@ -47,18 +47,22 @@ export default function AnalyzePage() {
         body: formData,
       });
       
-      // 2. Fallback to second endpoint if first is not JSON or fails
-      const contentType = response.headers.get('content-type');
-      if (!response.ok || !contentType || !contentType.includes('application/json')) {
+      let contentType = response.headers.get('content-type');
+      let isJson = contentType && contentType.includes('application/json');
+
+      // 2. Fallback to second endpoint if first is not JSON or not OK
+      if (!response.ok || !isJson) {
         console.warn('extract-pdf failed or returned non-JSON, trying fallback...');
         response = await fetch('/api/upload-document', {
             method: 'POST',
             body: formData,
         });
+        contentType = response.headers.get('content-type');
+        isJson = contentType && contentType.includes('application/json');
       }
 
-      const finalContentType = response.headers.get('content-type');
-      if (finalContentType && finalContentType.includes('application/json')) {
+      // 3. Final check and parse
+      if (isJson) {
         const data = await response.json();
         if (response.ok) {
           if (type === 'cv') {
@@ -73,8 +77,8 @@ export default function AnalyzePage() {
         }
       } else {
         const errorText = await response.text();
-        console.error('Non-JSON response received:', errorText);
-        alert(`Server Error (${response.status}): The server returned an unexpected response. This might be due to a file size limit (Vercel limit is 4.5MB) or a server crash.`);
+        console.error('Final non-JSON response received:', errorText);
+        alert(`Server Error (${response.status}): The server returned an unexpected response (HTML). This usually means a crash or a size limit was hit.`);
       }
     } catch (err) {
       console.error('PDF upload error:', err);
