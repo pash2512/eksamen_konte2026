@@ -1,10 +1,32 @@
+
+// 1. ABSOLUTE FIRST LINE POLYFILL
+if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+    console.log('Polyfilling DOMMatrix at module root');
+    const MockMatrix = class DOMMatrix {
+        constructor() {}
+        static fromFloat64Array() { return new MockMatrix(); }
+        static fromFloat32Array() { return new MockMatrix(); }
+    };
+    (global as any).DOMMatrix = MockMatrix;
+    (globalThis as any).DOMMatrix = MockMatrix;
+}
+
 import { NextResponse } from 'next/server';
-import { PDFParse } from 'pdf-parse';
-import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
-import path from 'path';
 
 export async function POST(request: Request) {
   try {
+    // 2. EXTRA SAFETY CHECK INSIDE HANDLER
+    if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+        console.log('Polyfilling DOMMatrix inside handler');
+        const MockMatrix = class DOMMatrix {
+            constructor() {}
+            static fromFloat64Array() { return new MockMatrix(); }
+            static fromFloat32Array() { return new MockMatrix(); }
+        };
+        (global as any).DOMMatrix = MockMatrix;
+        (globalThis as any).DOMMatrix = MockMatrix;
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
@@ -13,77 +35,59 @@ export async function POST(request: Request) {
     }
 
     const bytes = await file.arrayBuffer();
-    console.log(`Received file ${file.name}, size: ${bytes.byteLength} bytes.`);
-
     if (bytes.byteLength === 0) {
       return NextResponse.json({ error: 'File is empty' }, { status: 400 });
     }
-    
-    // Polyfill for pdf.js internals
-    if (typeof (global as unknown as Record<string, unknown>).DOMMatrix === 'undefined') {
-        (global as unknown as Record<string, unknown>).DOMMatrix = class DOMMatrix {
-            constructor() {}
-            static fromFloat64Array() { return new DOMMatrix(); }
-            static fromFloat32Array() { return new DOMMatrix(); }
-        };
+
+    console.log(`API Log: Processing file ${file.name}`);
+
+    // 3. DYNAMIC IMPORT
+    const pdfLib = await import('pdf-parse');
+    const PDFParse = pdfLib.PDFParse || (pdfLib.default ? (pdfLib.default as any).PDFParse : null) || pdfLib.default;
+
+    if (!PDFParse) {
+        throw new Error('PDF parsing library failed to load.');
     }
 
-    // Set worker source to legacy build for compatibility in Node.js
-    const pdfjsVersion = "5.4.296"; // Hardcoded from npm list
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/legacy/build/pdf.worker.min.mjs`;
+    const buffer = Buffer.from(bytes);
+    let text = "";
+    let pageCount = 0;
 
-    try {
-        console.log(`Starting extraction using pdf-parse 2.4.5 with CDN worker version ${pdfjsVersion}...`);
-        
-        const parser = new PDFParse({
-            data: Buffer.from(bytes),
+    if (typeof PDFParse === 'function' && !PDFParse.prototype?.getText) {
+        const data = await (PDFParse as any)(buffer);
+        text = data.text || "";
+        pageCount = data.numpages || 0;
+    } else {
+        const parser = new (PDFParse as any)({
+            data: buffer,
             verbosity: 0 
         });
 
-        // Use the getText() method
-        console.log('Requesting text extraction...');
         const result = await parser.getText();
-        console.log('Text extraction complete.');
-        
-        let text = result.text || "";
-        const numPages = result.total || 0;
+        text = result.text || "";
+        pageCount = result.total || 0;
 
-        // Final safety check: if text is still empty, let's try to see if result.pages has anything
         if (!text.trim() && result.pages) {
-            console.log('Main text field empty, checking individual pages...');
             text = (result.pages as Array<{ text?: string }>).map((p) => p.text || "").join("\n");
         }
 
-        console.log(`Extracted ${text.length} characters from ${numPages} pages.`);
-
-        // Clean up the parser
-        if (typeof (parser as { destroy?: () => Promise<void> }).destroy === 'function') {
-            console.log('Cleaning up parser...');
-            await (parser as { destroy: () => Promise<void> }).destroy();
+        if (typeof (parser as any).destroy === 'function') {
+            await (parser as any).destroy();
         }
-
-        return NextResponse.json({ 
-            text: text.trim(),
-            pageCount: numPages
-        });
-
-    } catch (parseError: unknown) {
-        console.error('Extraction failed inside try/catch:', parseError);
-        const err = parseError as Error;
-        return NextResponse.json({ 
-            error: 'Parsing Error', 
-            details: err.message,
-            stack: err.stack
-        }, { status: 500 });
     }
 
-  } catch (error: unknown) {
-    console.error('Global Route Error:', error);
-    const err = error as Error;
+    console.log(`API Log: Extracted ${text.length} chars`);
+
+    return NextResponse.json({ 
+        text: text.trim(),
+        pageCount: pageCount
+    });
+
+  } catch (error: any) {
+    console.error('API Global Route Error:', error);
     return NextResponse.json({ 
         error: 'Global Error', 
-        details: err.message,
-        stack: err.stack
+        details: error.message 
     }, { status: 500 });
   }
 }

@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
-import { PDFParse } from 'pdf-parse';
+
+// Robust polyfill for DOMMatrix - MUST be at the absolute top
+if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+    const MockMatrix = class DOMMatrix {
+        constructor() {}
+        static fromFloat64Array() { return new MockMatrix(); }
+        static fromFloat32Array() { return new MockMatrix(); }
+    };
+    (global as any).DOMMatrix = MockMatrix;
+    (globalThis as any).DOMMatrix = MockMatrix;
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,26 +23,44 @@ export async function POST(request: Request) {
 
     const bytes = await file.arrayBuffer();
     
-    // Polyfill for pdf.js internals
-    if (typeof (global as unknown as Record<string, unknown>).DOMMatrix === 'undefined') {
-        (global as unknown as Record<string, unknown>).DOMMatrix = class DOMMatrix {
+    // Safety check inside handler
+    if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+        const MockMatrix = class DOMMatrix {
             constructor() {}
-            static fromFloat64Array() { return new DOMMatrix(); }
-            static fromFloat32Array() { return new DOMMatrix(); }
+            static fromFloat64Array() { return new MockMatrix(); }
+            static fromFloat32Array() { return new MockMatrix(); }
         };
+        (global as any).DOMMatrix = MockMatrix;
+        (globalThis as any).DOMMatrix = MockMatrix;
+    }
+
+    // Dynamic import to ensure polyfill is applied
+    const pdfLib = await import('pdf-parse');
+    const PDFParse = pdfLib.PDFParse || (pdfLib.default ? (pdfLib.default as any).PDFParse : null) || pdfLib.default;
+
+    if (!PDFParse) {
+        throw new Error('PDF parsing library failed to load.');
     }
 
     try {
-        const parser = new PDFParse({
-            data: Buffer.from(bytes),
-            verbosity: 0 
-        });
+        const buffer = Buffer.from(bytes);
+        let text = "";
 
-        const result = await parser.getText();
-        const text = result.text || "";
+        if (typeof PDFParse === 'function' && !PDFParse.prototype?.getText) {
+            const data = await (PDFParse as any)(buffer);
+            text = data.text || "";
+        } else {
+            const parser = new (PDFParse as any)({
+                data: buffer,
+                verbosity: 0 
+            });
 
-        if (typeof (parser as { destroy?: () => Promise<void> }).destroy === 'function') {
-            await (parser as { destroy: () => Promise<void> }).destroy();
+            const result = await parser.getText();
+            text = result.text || "";
+
+            if (typeof (parser as any).destroy === 'function') {
+                await (parser as any).destroy();
+            }
         }
 
         return NextResponse.json({ 
@@ -40,21 +68,19 @@ export async function POST(request: Request) {
             text: text.trim() 
         });
 
-    } catch (parseError: unknown) {
+    } catch (parseError: any) {
         console.error('Extraction failed:', parseError);
-        const err = parseError as Error;
         return NextResponse.json({ 
             error: 'Parsing Error', 
-            details: err.message 
+            details: parseError.message 
         }, { status: 500 });
     }
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('Global Error:', error);
-    const err = error as Error;
     return NextResponse.json({ 
         error: 'Global Error', 
-        details: err.message 
+        details: error.message 
     }, { status: 500 });
   }
 }

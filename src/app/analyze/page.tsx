@@ -37,26 +37,44 @@ export default function AnalyzePage() {
   const handlePdfUpload = async (file: File, type: 'cv' | 'cl') => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('documentType', type);
     setIsExtracting(true);
     
     try {
-      const response = await fetch('/api/extract-pdf', {
+      // 1. Try first endpoint
+      let response = await fetch('/api/extract-pdf', {
         method: 'POST',
         body: formData,
       });
       
-      const data = await response.json();
+      // 2. Fallback to second endpoint if first is not JSON or fails
+      const contentType = response.headers.get('content-type');
+      if (!response.ok || !contentType || !contentType.includes('application/json')) {
+        console.warn('extract-pdf failed or returned non-JSON, trying fallback...');
+        response = await fetch('/api/upload-document', {
+            method: 'POST',
+            body: formData,
+        });
+      }
 
-      if (response.ok) {
-        if (type === 'cv') {
-          setCvText(data.text);
-          setCvFileName(file.name);
+      const finalContentType = response.headers.get('content-type');
+      if (finalContentType && finalContentType.includes('application/json')) {
+        const data = await response.json();
+        if (response.ok) {
+          if (type === 'cv') {
+            setCvText(data.text);
+            setCvFileName(file.name);
+          } else {
+            setCoverLetterText(data.text);
+            setClFileName(file.name);
+          }
         } else {
-          setCoverLetterText(data.text);
-          setClFileName(file.name);
+          alert(`Extraction Error: ${data.details || data.error || 'Unknown server error'}`);
         }
       } else {
-        alert(`Extraction Error: ${data.details || data.error || 'Unknown server error'}`);
+        const errorText = await response.text();
+        console.error('Non-JSON response received:', errorText);
+        alert(`Server Error (${response.status}): The server returned an unexpected response. This might be due to a file size limit (Vercel limit is 4.5MB) or a server crash.`);
       }
     } catch (err) {
       console.error('PDF upload error:', err);
@@ -104,14 +122,19 @@ export default function AnalyzePage() {
         }),
       });
       
-      const results = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(results.error || 'Failed to analyze');
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const results = await response.json();
+        if (!response.ok) {
+          throw new Error(results.error || 'Failed to analyze');
+        }
+        sessionStorage.setItem('jobfit_analysis_result', JSON.stringify(results));
+        router.push('/results');
+      } else {
+        const errorText = await response.text();
+        console.error('Non-JSON response received from analyze:', errorText);
+        throw new Error(`Server Error (${response.status}): The analysis server returned an unexpected response. Please try again later.`);
       }
-      
-      sessionStorage.setItem('jobfit_analysis_result', JSON.stringify(results));
-      router.push('/results');
     } catch (error) {
       console.error('Analysis failed:', error);
       alert(error instanceof Error ? error.message : 'An error occurred during analysis');
